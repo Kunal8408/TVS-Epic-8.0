@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+.DS_Store
+Thumbs.db
+# NOTE: models/ and outputs/ are intentionally NOT ignored — the app needs them at runtime.
