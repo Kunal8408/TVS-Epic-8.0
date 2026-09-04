@@ -1,0 +1,41 @@
+{
+  "assumptions": {
+    "cost_of_funds": 0.09,
+    "PD_map": {
+      "ULTRA LOW RISK": 0.02,
+      "LOW RISK": 0.04,
+      "MEDIUM RISK": 0.07,
+      "HIGH RISK": 0.12,
+      "VERY HIGH RISK": 0.18
+    },
+    "rate_premium": {
+      "Low": 0.0,
+      "Medium": 0.25,
+      "High": 1.0,
+      "Critical": 2.0
+    },
+    "tenure_policy": {
+      "Low": 48,
+      "Medium": 48,
+      "High": 48,
+      "Critical": 36
+    },
+    "beta_ltv": 1.5,
+    "kappa_capital": 0.12,
+    "ltv_floor": 0.65,
+    "ltv_ceil": 0.92,
+    "optimal_ltv_top": 0.88,
+    "optimal_slope": 0.2
+  },
+  "headline": {
+    "mean_lgd_current": 0.21740918927213335,
+    "mean_lgd_recommended": 0.15496192187698124,
+    "lgd_reduction_pp": 6.244726739515211,
+    "gd_loss_current_cr": 20.27944320371012,
+    "gd_loss_recommended_cr": 12.343883675854826,
+    "gd_loss_reduction_pct": -39.1310523081989,
+    "profit_lift_cr": 0.09199025331562734,
+    "neg_equity_months_current": 21.936466666666668,
+    "neg_equity_months_recommended": 19.51193333333333
+  }
+}
