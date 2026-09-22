@@ -1,7 +1,7 @@
 """
-TVS Credit EPIC 8 — Dynamic Residual Pricing & Lending Strategy Engine
+TVS Credit EPIC 8: Dynamic Residual Pricing & Lending Strategy Engine
 Interactive app: (1) Portfolio Dashboard  (2) AI Lending Copilot  (3) Scenario Simulator.
-Every number is produced by engine.py — the same validated pipeline used in the notebooks.
+Every number is produced by engine.py, the same validated pipeline used in the notebooks.
 Run:  streamlit run app.py
 """
 import sys, json
@@ -30,13 +30,15 @@ def opts(col):  # dropdown choices from the data
     return sorted(df[col].dropna().astype(str).unique().tolist())
 
 # ---------------------------------------------------------------- header
-st.markdown(f"<h1 style='color:{BRAND};margin-bottom:0'>Dynamic Residual Pricing & Lending Strategy Engine</h1>"
-            "<p style='color:gray;margin-top:2px'>TVS Credit · EPIC 8 Analytics Challenge · two-wheeler portfolio</p>",
+# Rendered as a styled <div> (not <h1>) so Streamlit does not attach an anchor-link icon beside it.
+st.markdown(f"<div style='color:{BRAND};font-size:2.25rem;font-weight:700;line-height:1.15;margin-bottom:0'>"
+            "Dynamic Residual Pricing &amp; Lending Strategy Engine</div>"
+            "<p style='color:gray;margin-top:2px'>TVS Credit · EPIC 8 Analytics Challenge · Two-wheeler portfolio</p>",
             unsafe_allow_html=True)
 
 tab1, tab2, tab3 = st.tabs(["📊  Portfolio Dashboard", "🤝  AI Lending Copilot", "🌪️  Scenario Simulator"])
 
-# ================================================================ TAB 1 — DASHBOARD
+# ================================================================ TAB 1: DASHBOARD
 with tab1:
     st.subheader("Portfolio impact of the recommended lending policy")
     c = st.columns(4)
@@ -56,7 +58,7 @@ with tab1:
         st.markdown("**Residual-risk band distribution**")
         st.bar_chart(df["Risk_Band"].value_counts().reindex(["Low","Medium","High","Critical"]), color=BRAND)
     with b:
-        st.markdown("**Segment risk — mean risk score by model**")
+        st.markdown("**Segment risk: mean risk score by model**")
         seg = df.groupby("Asset Model")["Residual_Risk_Score"].mean().sort_values(ascending=False)
         st.bar_chart(seg, color=RED, horizontal=True)
 
@@ -66,17 +68,31 @@ with tab1:
     st.bar_chart(bb, color=[RED, BRAND], stack=False)
 
     with st.expander("Browse loan-level recommendations"):
-        show = ["Agmt Id","Asset Model","Risk_Band","Residual_Risk_Score","LTV","Rec_LTV",
-                "Cust Net IRR","Rec_Rate","Tenure","Rec_Tenure","Cur_E_LGD","Rec_E_LGD","NetValue_Lift"]
-        st.dataframe(df[show].head(400), width="stretch", height=320)
+        src = df.head(400)
+        tbl = pd.DataFrame({
+            "Loan ID":                  src["Agmt Id"].astype(str),
+            "Model":                    src["Asset Model"].astype(str),
+            "Risk band":                src["Risk_Band"].astype(str),
+            "Risk score (0-100)":       src["Residual_Risk_Score"].round(0).astype(int),
+            "Current LTV (%)":          (src["LTV"]*100).round(1),
+            "Recommended LTV (%)":      (src["Rec_LTV"]*100).round(1),
+            "Current rate (%)":         src["Cust Net IRR"].round(2),
+            "Recommended rate (%)":     src["Rec_Rate"].round(2),
+            "Current tenure (mo)":      src["Tenure"].round(0).astype(int),
+            "Recommended tenure (mo)":  src["Rec_Tenure"].round(0).astype(int),
+            "Current expected loss (%)":     (src["Cur_E_LGD"]*100).round(1),
+            "Recommended expected loss (%)": (src["Rec_E_LGD"]*100).round(1),
+            "Net value gain (₹)":       src["NetValue_Lift"].round(0).astype(int),
+        })
+        st.dataframe(tbl, width="stretch", height=320, hide_index=True)
 
-# ================================================================ TAB 2 — COPILOT
+# ================================================================ TAB 2: COPILOT
 with tab2:
     st.subheader("Price a loan & explain the decision")
     st.caption("The dropdowns are **dependent**: choose an *Asset Model* and only its valid variants & fuel "
                "type remain; choose a *Region* and only its states remain.")
 
-    # NOTE: inputs are deliberately NOT wrapped in st.form — widgets inside a form do not rerun on
+    # NOTE: inputs are deliberately NOT wrapped in st.form. Widgets inside a form do not rerun on
     # change, so the dependent (cascading) dropdowns would never update. Plain widgets rerun on every
     # change, which is exactly what lets each child dropdown refilter off its parent.
     c = st.columns(4)
@@ -117,7 +133,7 @@ with tab2:
     if ctx:
         raw, eng = ctx["raw"], ctx["eng"]; row = eng.iloc[0]
         irr, tenure, cost = ctx["irr"], ctx["tenure"], ctx["cost"]
-        st.caption(f"Showing the last scored loan — **{raw['Asset Model']} {raw['Asset Variant']}**, "
+        st.caption(f"Showing the last scored loan: **{raw['Asset Model']} {raw['Asset Variant']}**, "
                    f"{raw['Cust Region']}/{raw['Cust State']}. Change inputs and click **Score & recommend** to refresh.")
 
         k = st.columns(4)
@@ -138,21 +154,21 @@ with tab2:
             OSc = engine._os(raw["LTV"]*cost, irr/1200, nc); OSr = engine._os(row["Rec_LTV"]*cost, row["Rec_Rate"]/1200, nr)
             fig, ax = plt.subplots(figsize=(7,4.2))
             ax.plot(ages, rv, color="green", lw=2.3, label="Forecast residual value")
-            ax.plot(ages[:nc], OSc, color=RED, lw=2, label=f"OS – current ({raw['LTV']:.0%}/{irr:.1f}%/{nc}m)")
-            ax.plot(ages[:nr], OSr, color=BRAND, lw=2, ls="--", label=f"OS – recommended ({row['Rec_LTV']:.0%}/{row['Rec_Rate']:.1f}%/{nr}m)")
+            ax.plot(ages[:nc], OSc, color=RED, lw=2, label=f"Current terms ({raw['LTV']:.0%}/{irr:.1f}%/{nc}m)")
+            ax.plot(ages[:nr], OSr, color=BRAND, lw=2, ls="--", label=f"Recommended terms ({row['Rec_LTV']:.0%}/{row['Rec_Rate']:.1f}%/{nr}m)")
             ax.fill_between(ages[:nc], rv[:nc], OSc, where=OSc>rv[:nc], color=RED, alpha=.15)
             ax.set_xlabel("Asset age (months)"); ax.set_ylabel("₹"); ax.legend(fontsize=7)
-            ax.set_title("Amortisation vs residual value — the negative-equity window")
+            ax.set_title("Amount owed vs residual value: the negative-equity window")
             st.pyplot(fig)
         with right:
             st.markdown("**Residual value forecast**")
             st.table(pd.DataFrame({"Horizon":["12 m","24 m","36 m"],
                 "Forecast ₹":[f"₹{row[f'Residual_Value_Forecast_{h}m']:,.0f}" for h in (12,24,36)]}).set_index("Horizon"))
             use_llm = st.toggle("Polish with GenAI (needs ANTHROPIC_API_KEY)", value=False)
-            st.markdown("**AI Lending Copilot — rationale**")
+            st.markdown("**AI Lending Copilot rationale**")
             st.info(engine.rationale(eng.iloc[[0]], use_llm=use_llm))
 
-# ================================================================ TAB 3 — SCENARIO SIMULATOR
+# ================================================================ TAB 3: SCENARIO SIMULATOR
 with tab3:
     st.subheader("Stress the portfolio against market disruption")
     preset = st.radio("Preset", ["Custom","EV Acceleration","Fuel Price Spike","High Inflation","Macro Downturn"],
@@ -170,12 +186,12 @@ with tab3:
 
     r = engine.portfolio_scenario(df, RV, rv_ice=1+ice/100, rv_ev=1+ev/100, pd_mult=1+pdm/100, cof_add=cof/100)
     k = st.columns(3)
-    k[0].metric("Loss — current policy", f"₹{r['cur_loss_cr']:.1f} Cr")
-    k[1].metric("Loss — recommended policy", f"₹{r['rec_loss_cr']:.1f} Cr",
+    k[0].metric("Loss (current policy)", f"₹{r['cur_loss_cr']:.1f} Cr")
+    k[1].metric("Loss (recommended policy)", f"₹{r['rec_loss_cr']:.1f} Cr",
                 f"{100*(r['rec_loss_cr']-r['cur_loss_cr'])/r['cur_loss_cr']:.0f}%")
     k[2].metric("Mean LGD (recommended)", f"{r['rec_lgd']*100:.1f}%", f"vs {r['cur_lgd']*100:.1f}% current")
     st.bar_chart(pd.DataFrame({"₹ Cr loss":{"Current policy":r["cur_loss_cr"],"Recommended policy":r["rec_loss_cr"]}}),
                  color=BRAND, horizontal=True)
     st.caption("Because the historical book carries no market-cycle signal (all sales fell in a ~15-month window), "
-               "disruption is modelled as an explicit parametric overlay on residual values, PD and funding cost — "
+               "disruption is modelled as an explicit parametric overlay on residual values, PD and funding cost, "
                "and the recommended policy is stress-tested with all levers held fixed.")

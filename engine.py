@@ -1,5 +1,5 @@
 """
-TVS EPIC 8 — Dynamic Residual Pricing & Lending Strategy Engine (reusable inference module).
+TVS EPIC 8: Dynamic Residual Pricing & Lending Strategy Engine (reusable inference module).
 Single source of truth for the forecast -> risk -> recommendation -> explanation pipeline.
 Imported by the notebooks, the Streamlit dashboard, and the web prototype so they all share ONE validated path.
 """
@@ -147,7 +147,7 @@ def rationale(rowf, use_llm=False):
     up = lambda d: ", ".join(_phrase(f,v) for f,v,c in d)
     f12,f24,f36 = (int(r.get(f"Residual_Value_Forecast_{h}m",0)) for h in (12,24,36))
     txt = (
-      f"RECOMMENDATION for {r['Agmt Id']} ({r['Asset Model']}) — risk band {r['Risk_Band']} "
+      f"RECOMMENDATION for {r['Agmt Id']} ({r['Asset Model']}): risk band {r['Risk_Band']} "
       f"(score {r['Residual_Risk_Score']:.0f}/100).\n"
       f"• Terms: set LTV to {r['Rec_LTV']:.0%} (from {float(r['LTV']):.0%}), price at {r['Rec_Rate']:.2f}% "
       f"(from {float(r['Cust Net IRR']):.2f}%), cap tenure at {int(r['Rec_Tenure'])} months (from {int(r['Tenure'])}).\n"
