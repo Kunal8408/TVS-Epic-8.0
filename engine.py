@@ -132,31 +132,77 @@ _HUMAN = {
  "Asset Cost At Disbursal":"asset price ₹{v:,.0f}", "Cust Cibil Score":"CIBIL {v}", "Cust Net IRR":"current rate {v:.1f}%",
  "LTV":"LTV {v:.0%}", "Tenure":"tenure {v} months", "App Score Risk":"application risk '{v}'", "Is_EV":"EV flag {v}",
  "Cust Net Salary":"net salary ₹{v:,.0f}", "Cust Age":"age {v}", "Cust Region":"region {v}", "Cust State":"state {v}",
- "Asset Fuel Type":"fuel {v}", "Registration Flag":"registration {v}"}
+ "Asset Fuel Type":"fuel {v}", "Registration Flag":"registration {v}",
+ "Agmt_Year":"the year the loan started ({v:.0f})", "Cust Branch":"branch {v}"}
 def _phrase(f, v):
     if isinstance(v, float): v = round(v, 1)
     try: return _HUMAN.get(f, f+" {v}").format(v=v)
     except Exception: return f"{f} {v}"
 
 def rationale(rowf, use_llm=False):
-    """Deterministic, SHAP-grounded plain-English recommendation for underwriters.
-    If use_llm=True and an API key + SDK are available, an LLM rewrites it more fluently; otherwise this text stands."""
+    """Deterministic, SHAP-grounded plain-English recommendation, written to read like a short
+    note a non-technical manager can act on. If use_llm=True and an API key + SDK are available,
+    an LLM rewrites it more fluently; otherwise this text stands."""
     r = rowf.iloc[0]
     risk_drv = explain_row(rowf, "risk", 3)
     val_drv  = [d for d in explain_row(rowf, "forecaster", 5) if d[0] != HORIZON][:3]  # horizon is the axis, not a driver
-    up = lambda d: ", ".join(_phrase(f,v) for f,v,c in d)
-    f12,f24,f36 = (int(r.get(f"Residual_Value_Forecast_{h}m",0)) for h in (12,24,36))
+    up = lambda d: ", ".join(_phrase(f, v) for f, v, c in d)
+    f12, f24, f36 = (int(r.get(f"Residual_Value_Forecast_{h}m", 0)) for h in (12, 24, 36))
+
+    cur_ltv, rec_ltv   = float(r["LTV"]), float(r["Rec_LTV"])
+    cur_rate, rec_rate = float(r["Cust Net IRR"]), float(r["Rec_Rate"])
+    cur_ten, rec_ten   = int(r["Tenure"]), int(r["Rec_Tenure"])
+    cur_lgd, rec_lgd   = float(r["Cur_E_LGD"]), float(r["Rec_E_LGD"])
+    cur_ne, rec_ne     = int(r["Cur_NegEq_Months"]), int(r["Rec_NegEq_Months"])
+    lift = float(r["NetValue_Lift"])
+
+    if rec_ltv < cur_ltv - 1e-9:
+        ltv_line = f"Lend **{rec_ltv:.0%}** of the bike's price, down from **{cur_ltv:.0%}** (a smaller loan means less to lose)."
+    elif rec_ltv > cur_ltv + 1e-9:
+        ltv_line = f"You can safely lend a little more: **{rec_ltv:.0%}** of the bike's price, up from **{cur_ltv:.0%}**."
+    else:
+        ltv_line = f"Keep the loan at **{rec_ltv:.0%}** of the bike's price."
+
+    if rec_rate > cur_rate + 1e-9:
+        rate_line = f"Raise the interest rate a little, from **{cur_rate:.2f}%** to **{rec_rate:.2f}%**, to price in the extra risk."
+    elif rec_rate < cur_rate - 1e-9:
+        rate_line = f"Lower the interest rate from **{cur_rate:.2f}%** to **{rec_rate:.2f}%**."
+    else:
+        rate_line = f"Keep the interest rate at **{rec_rate:.2f}%**."
+
+    if rec_ten < cur_ten:
+        ten_line = f"Shorten the loan from **{cur_ten}** to **{rec_ten} months**, so it is repaid before the bike loses too much value."
+    else:
+        ten_line = f"Keep the loan length at **{rec_ten} months**."
+
+    if rec_ne < cur_ne:
+        ne_line = f"shrinks from **{cur_ne}** to **{rec_ne} months**"
+    elif rec_ne > cur_ne:
+        ne_line = f"moves from **{cur_ne}** to **{rec_ne} months**"
+    else:
+        ne_line = f"stays at **{rec_ne} months**"
+
+    if lift >= 0:
+        bottom = f"Overall, these terms make this loan worth about **₹{lift:,.0f} more** to TVS, after allowing for risk."
+    else:
+        bottom = (f"These terms give up about **₹{abs(lift):,.0f}** of value in exchange for clearly lower risk and a "
+                  f"shorter time underwater, a deliberately safer trade.")
+
     txt = (
-      f"RECOMMENDATION for {r['Agmt Id']} ({r['Asset Model']}): risk band {r['Risk_Band']} "
-      f"(score {r['Residual_Risk_Score']:.0f}/100).\n"
-      f"• Terms: set LTV to {r['Rec_LTV']:.0%} (from {float(r['LTV']):.0%}), price at {r['Rec_Rate']:.2f}% "
-      f"(from {float(r['Cust Net IRR']):.2f}%), cap tenure at {int(r['Rec_Tenure'])} months (from {int(r['Tenure'])}).\n"
-      f"• Residual outlook: forecast to fetch ₹{f12:,} / ₹{f24:,} / ₹{f36:,} at 12 / 24 / 36 months. "
-      f"Main value drivers: {up(val_drv)}.\n"
-      f"• Risk rationale: expected loss-given-default falls from {float(r['Cur_E_LGD']):.0%} to {float(r['Rec_E_LGD']):.0%}, "
-      f"and the negative-equity window narrows from {int(r['Cur_NegEq_Months'])} to {int(r['Rec_NegEq_Months'])} months. "
-      f"Key risk drivers: {up(risk_drv)}.\n"
-      f"• Economic impact: risk-adjusted net-value change ₹{float(r['NetValue_Lift']):,.0f}."
+      f"This **{r['Asset Model']}** loan has a residual-risk score of **{r['Residual_Risk_Score']:.0f}/100** "
+      f"(**{r['Risk_Band']}** risk).\n\n"
+      f"**What we recommend**\n\n"
+      f"- {ltv_line}\n"
+      f"- {rate_line}\n"
+      f"- {ten_line}\n\n"
+      f"**What the bike should resell for**\n\n"
+      f"About **₹{f12:,}** after 1 year, **₹{f24:,}** after 2 years, and **₹{f36:,}** after 3 years. "
+      f"Its resale value is shaped mostly by {up(val_drv)}.\n\n"
+      f"**Why these terms are safer**\n\n"
+      f"If this loan were to default, the expected loss drops from **{cur_lgd:.0%}** to **{rec_lgd:.0%}**, and the time it "
+      f"stays \"underwater\" (owing more than the bike is worth) {ne_line}. The main things pushing this loan's risk up "
+      f"are {up(risk_drv)}.\n\n"
+      f"**Bottom line**\n\n{bottom}"
     )
     if use_llm:
         polished = _llm_polish(txt)

@@ -164,9 +164,9 @@ with tab2:
             st.markdown("**Residual value forecast**")
             st.table(pd.DataFrame({"Horizon":["12 m","24 m","36 m"],
                 "Forecast ₹":[f"₹{row[f'Residual_Value_Forecast_{h}m']:,.0f}" for h in (12,24,36)]}).set_index("Horizon"))
-            use_llm = st.toggle("Polish with GenAI (needs ANTHROPIC_API_KEY)", value=False)
-            st.markdown("**AI Lending Copilot rationale**")
-            st.info(engine.rationale(eng.iloc[[0]], use_llm=use_llm))
+            st.markdown("**Why we recommend this**")
+            with st.container(border=True):
+                st.markdown(engine.rationale(eng.iloc[[0]]))
 
 # ================================================================ TAB 3: SCENARIO SIMULATOR
 with tab3:
