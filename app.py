@@ -73,23 +73,32 @@ with tab1:
 # ================================================================ TAB 2 — COPILOT
 with tab2:
     st.subheader("Price a loan & explain the decision")
-    with st.form("loan"):
-        c = st.columns(4)
-        model   = c[0].selectbox("Asset Model", opts("Asset Model"))
-        variant = c[1].selectbox("Asset Variant", sorted(df[df["Asset Model"]==model]["Asset Variant"].astype(str).unique()) or opts("Asset Variant"))
-        fuel    = c[2].selectbox("Fuel Type", opts("Asset Fuel Type"))
-        cost    = c[3].number_input("Asset Cost (₹)", 40000, 400000, 110000, 5000)
-        c = st.columns(4)
-        loan    = c[0].number_input("Loan Amount (₹)", 20000, 380000, 95000, 5000)
-        tenure  = c[1].selectbox("Tenure (months)", [12,18,24,30,36,42,48], index=5)
-        irr     = c[2].number_input("Proposed Rate (IRR %)", 12.0, 34.0, 25.5, 0.25)
-        apprisk = c[3].selectbox("App Score Risk", opts("App Score Risk"))
-        c = st.columns(4)
-        region  = c[0].selectbox("Region", opts("Cust Region"))
-        state   = c[1].selectbox("State", opts("Cust State"))
-        tier    = c[2].selectbox("Pincode Tier", opts("Pincode Tier"))
-        reg     = c[3].selectbox("Registration", opts("Registration Flag"))
-        go = st.form_submit_button("Score & recommend", type="primary")
+    st.caption("The dropdowns are **dependent**: choose an *Asset Model* and only its valid variants & fuel "
+               "type remain; choose a *Region* and only its states remain.")
+
+    # NOTE: inputs are deliberately NOT wrapped in st.form — widgets inside a form do not rerun on
+    # change, so the dependent (cascading) dropdowns would never update. Plain widgets rerun on every
+    # change, which is exactly what lets each child dropdown refilter off its parent.
+    c = st.columns(4)
+    model   = c[0].selectbox("Asset Model", opts("Asset Model"))
+    v_opts  = sorted(df[df["Asset Model"]==model]["Asset Variant"].dropna().astype(str).unique().tolist())
+    variant = c[1].selectbox("Asset Variant", v_opts or opts("Asset Variant"))
+    f_opts  = sorted(df[df["Asset Model"]==model]["Asset Fuel Type"].dropna().astype(str).unique().tolist())
+    fuel    = c[2].selectbox("Fuel Type", f_opts or opts("Asset Fuel Type"),
+                             help="Fuel type is determined by the chosen model in TVS's book.")
+    cost    = c[3].number_input("Asset Cost (₹)", 40000, 400000, 110000, 5000)
+    c = st.columns(4)
+    loan    = c[0].number_input("Loan Amount (₹)", 20000, 380000, 95000, 5000)
+    tenure  = c[1].selectbox("Tenure (months)", [12,18,24,30,36,42,48], index=5)
+    irr     = c[2].number_input("Proposed Rate (IRR %)", 12.0, 34.0, 25.5, 0.25)
+    apprisk = c[3].selectbox("App Score Risk", opts("App Score Risk"))
+    c = st.columns(4)
+    region  = c[0].selectbox("Region", opts("Cust Region"))
+    s_opts  = sorted(df[df["Cust Region"]==region]["Cust State"].dropna().astype(str).unique().tolist())
+    state   = c[1].selectbox("State", s_opts or opts("Cust State"))
+    tier    = c[2].selectbox("Pincode Tier", opts("Pincode Tier"))
+    reg     = c[3].selectbox("Registration", opts("Registration Flag"))
+    go = st.button("Score & recommend", type="primary")
 
     if go:
         raw = {"Agmt Id":"LIVE_INPUT","Cust Age":35,"Cust Gender":"M","Cust Cibil Score":710,
@@ -100,7 +109,16 @@ with tab2:
                "Asset Model":model,"Asset Fuel Type":fuel,"Asset Cost At Disbursal":int(cost),
                "Loan Amount":int(loan),"LTV":loan/cost}
         eng = engine.recommend(engine.score_risk(engine.forecast_residual(engine.engineer(raw))))
-        row = eng.iloc[0]
+        # persist so results survive the reruns triggered by any later dropdown change
+        st.session_state["copilot"] = {"raw":raw, "eng":eng, "irr":float(irr),
+                                       "tenure":int(tenure), "cost":int(cost)}
+
+    ctx = st.session_state.get("copilot")
+    if ctx:
+        raw, eng = ctx["raw"], ctx["eng"]; row = eng.iloc[0]
+        irr, tenure, cost = ctx["irr"], ctx["tenure"], ctx["cost"]
+        st.caption(f"Showing the last scored loan — **{raw['Asset Model']} {raw['Asset Variant']}**, "
+                   f"{raw['Cust Region']}/{raw['Cust State']}. Change inputs and click **Score & recommend** to refresh.")
 
         k = st.columns(4)
         k[0].metric("Residual risk", f"{row['Residual_Risk_Score']:.0f}/100", row["Risk_Band"])
