@@ -244,10 +244,15 @@ def _os_mat(P, r_m, n):
     return P[:, None] * (f**n - f**t[None, :]) / (f**n - 1)
 
 def portfolio_eval(df, RV, ltv, rate, ten, pd_base, cof=COF):
-    """Vectorised economic engine over the whole book. Returns per-loan Net, E_LGD, GDloss (₹), NegEqMonths."""
+    """Vectorised economic engine over the whole book. Per-loan outputs:
+      Net       = risk-adjusted profit (uses PD and funding cost)
+      E_LGD     = expected loss-given-default (severity, 0..1)
+      GDloss    = LGD x EAD (severity in ₹; independent of PD and funding cost)
+      ExpLoss   = PD x LGD x EAD (expected credit loss in ₹; responds to the PD lever)
+      NegEqMonths = months underwater"""
     A = load_assets(); pmf = A["pmf"]; N = len(df)
     cost = df["Asset Cost At Disbursal"].values.astype(float); cur_ltv = df["LTV"].clip(0.5, 1.0).values
-    net = np.zeros(N); el = np.zeros(N); gl = np.zeros(N); nem = np.zeros(N, int)
+    net = np.zeros(N); el = np.zeros(N); gl = np.zeros(N); xl = np.zeros(N); nem = np.zeros(N, int)
     P = ltv*cost; r_m = rate/1200.0
     pd_eff = np.clip(pd_base*(1+BETA_LTV*(ltv-cur_ltv)), 0.003, 0.9)
     for n in np.unique(ten):
@@ -257,8 +262,8 @@ def portfolio_eval(df, RV, ltv, rate, ten, pd_base, cof=COF):
         e = (lgd_t*w[None, :]).sum(1); ead = (OS*w[None, :]).sum(1); pne = short.max(1); nm = (short > 0).sum(1)
         emi = np.where(r_m > 0, P*r_m*(1+r_m)**nn/((1+r_m)**nn-1), P/nn)
         nt = (emi*nn-P)*(1-pd_eff) - P*cof*(nn/12.0)*0.5 - pd_eff*e*ead - KAPPA*pne
-        for arr, val in zip((net, el, gl, nem), (nt, e, e*ead, nm)): arr[m] = val[m]
-    return dict(Net=net, E_LGD=el, GDloss=gl, NegEqMonths=nem)
+        for arr, val in zip((net, el, gl, xl, nem), (nt, e, e*ead, pd_eff*e*ead, nm)): arr[m] = val[m]
+    return dict(Net=net, E_LGD=el, GDloss=gl, ExpLoss=xl, NegEqMonths=nem)
 
 def recommended_terms(df):
     """Vectorised recommended LTV / rate / tenure under the optimised risk-based policy."""
@@ -283,4 +288,6 @@ def portfolio_scenario(df, RV, rv_ice=1.0, rv_ev=1.0, pd_mult=1.0, cof_add=0.0):
     rec = portfolio_eval(df, RVs, rec_ltv, rec_rate, rec_ten, pd_base, COF+cof_add)
     return dict(cur_loss_cr=cur["GDloss"].sum()/1e7, rec_loss_cr=rec["GDloss"].sum()/1e7,
                 cur_lgd=float(cur["E_LGD"].mean()), rec_lgd=float(rec["E_LGD"].mean()),
-                cur_negeq=float(cur["NegEqMonths"].mean()), rec_negeq=float(rec["NegEqMonths"].mean()))
+                cur_negeq=float(cur["NegEqMonths"].mean()), rec_negeq=float(rec["NegEqMonths"].mean()),
+                cur_exploss_cr=cur["ExpLoss"].sum()/1e7, rec_exploss_cr=rec["ExpLoss"].sum()/1e7,
+                cur_profit_cr=cur["Net"].sum()/1e7, rec_profit_cr=rec["Net"].sum()/1e7)

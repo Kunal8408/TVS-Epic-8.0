@@ -171,6 +171,9 @@ with tab2:
 # ================================================================ TAB 3: SCENARIO SIMULATOR
 with tab3:
     st.subheader("Stress the portfolio against market disruption")
+    st.caption("Pick a preset or move the sliders to imagine a tougher world, then watch how the **current** policy "
+               "and the **recommended** policy cope. In every realistic scenario the recommended policy should lose "
+               "less and stay at least as profitable.")
     preset = st.radio("Preset", ["Custom","EV Acceleration","Fuel Price Spike","High Inflation","Macro Downturn"],
                       horizontal=True)
     P = {"Custom":dict(ice=0,ev=0,pd=0,cof=0),
@@ -179,19 +182,38 @@ with tab3:
          "High Inflation":dict(ice=5,ev=5,pd=10,cof=2),
          "Macro Downturn":dict(ice=-10,ev=-15,pd=30,cof=0)}[preset]
     c = st.columns(4)
-    ice = c[0].slider("ICE residual shock (%)", -30, 15, P["ice"])
-    ev  = c[1].slider("EV residual shock (%)",  -30, 15, P["ev"])
-    pdm = c[2].slider("PD change (%)",           0, 60, P["pd"])
-    cof = c[3].slider("Funding-cost add (pp)",   0,  5, P["cof"])
+    ice = c[0].slider("Petrol-bike resale shock (%)", -30, 15, P["ice"],
+                      help="How much less (−) or more (+) used petrol two-wheelers fetch. Hits ~98% of the book, so it moves the numbers the most.")
+    ev  = c[1].slider("EV resale shock (%)", -30, 15, P["ev"],
+                      help="Same, for electric two-wheelers. Only ~2% of the book, so its effect on the totals is small by design.")
+    pdm = c[2].slider("Default-rate rise (%)", 0, 60, P["pd"],
+                      help="How much more likely loans are to default. Raises expected credit loss and trims profit.")
+    cof = c[3].slider("Funding-cost rise (pp)", 0, 5, P["cof"],
+                      help="Extra cost of the money TVS lends out. Trims profit; it does not change loss severity.")
 
     r = engine.portfolio_scenario(df, RV, rv_ice=1+ice/100, rv_ev=1+ev/100, pd_mult=1+pdm/100, cof_add=cof/100)
+
+    st.markdown("**Expected credit loss and profit under this scenario**")
     k = st.columns(3)
-    k[0].metric("Loss (current policy)", f"₹{r['cur_loss_cr']:.1f} Cr")
-    k[1].metric("Loss (recommended policy)", f"₹{r['rec_loss_cr']:.1f} Cr",
-                f"{100*(r['rec_loss_cr']-r['cur_loss_cr'])/r['cur_loss_cr']:.0f}%")
-    k[2].metric("Mean LGD (recommended)", f"{r['rec_lgd']*100:.1f}%", f"vs {r['cur_lgd']*100:.1f}% current")
-    st.bar_chart(pd.DataFrame({"₹ Cr loss":{"Current policy":r["cur_loss_cr"],"Recommended policy":r["rec_loss_cr"]}}),
+    k[0].metric("Expected credit loss (current policy)", f"₹{r['cur_exploss_cr']:.2f} Cr")
+    dl = 100*(r['rec_exploss_cr']-r['cur_exploss_cr'])/r['cur_exploss_cr'] if r['cur_exploss_cr'] else 0.0
+    k[1].metric("Expected credit loss (recommended policy)", f"₹{r['rec_exploss_cr']:.2f} Cr",
+                f"{dl:.0f}% vs current", delta_color="inverse")
+    k[2].metric("Profit advantage of recommended", f"₹{r['rec_profit_cr']-r['cur_profit_cr']:+.2f} Cr",
+                help="Risk-adjusted profit of the recommended policy minus the current policy. Positive means recommended earns more after allowing for risk.")
+    st.bar_chart(pd.DataFrame({"₹ Cr expected credit loss":
+                 {"Current policy":r["cur_exploss_cr"],"Recommended policy":r["rec_exploss_cr"]}}),
                  color=BRAND, horizontal=True)
-    st.caption("Because the historical book carries no market-cycle signal (all sales fell in a ~15-month window), "
-               "disruption is modelled as an explicit parametric overlay on residual values, PD and funding cost, "
-               "and the recommended policy is stress-tested with all levers held fixed.")
+
+    st.markdown("**Loss-given-default: the severity-only view (the dashboard headline)**")
+    k2 = st.columns(2)
+    k2[0].metric("Loss-given-default (current)", f"₹{r['cur_loss_cr']:.1f} Cr", delta_color="off")
+    k2[1].metric("Loss-given-default (recommended)", f"₹{r['rec_loss_cr']:.1f} Cr",
+                 f"vs ₹{r['cur_loss_cr']:.1f} Cr current", delta_color="off")
+
+    st.caption("**How to read this.** *Expected credit loss* = probability of default × loss-given-default × exposure, "
+               "so the two resale sliders and the default-rate slider all move it. *Profit advantage* also responds to "
+               "the funding-cost slider. *Loss-given-default* (₹20.3 → 12.3 Cr at baseline) is the severity-only view "
+               "shown on the dashboard; it moves only with the resale sliders, because default frequency and funding "
+               "cost are not part of severity. Since the historical book has no market-cycle signal (all sales fell in "
+               "a ~15-month window), every shock is an explicit what-if overlay, tested with each policy's terms held fixed.")
